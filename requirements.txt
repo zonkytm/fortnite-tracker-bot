@@ -1,0 +1,5 @@
+aiogram~=2.21
+aiogram.utils
+aiosqlite~=0.20.0
+APScheduler~=3.10.4
+aiohttp==3.8.2
