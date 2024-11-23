@@ -50,15 +50,15 @@ async def get_epic_stats(message: types.Message):
         # Извлекаем имя пользователя из команды
         command_args = message.get_args()
         if not command_args:
-            await message.reply("Пожалуйста, укажите имя пользователя. Пример: /get_stats {username}")
+            await message.reply("Пожалуйста, укажите имя пользователя. Пример: /stats {username}")
             return
 
         username = command_args.strip()
 
         # Отправляем запрос к API с использованием имени пользователя
-        url = f"https://fortnite-api.com/v2/stats/br/v2"
+        url = os.getenv("Tracker_Api_Base_Url")
         headers = {
-            "Authorization": "5df526ae-cb94-4f87-8281-c9f8a5397ba3"
+            "Authorization": os.getenv("Tracker_Api_Key")
         }
 
         async with aiohttp.ClientSession() as session:
@@ -116,10 +116,67 @@ async def remove_message(bot, message_id, chat_id):
     except Exception as e:
         logging.error(f"Ошибка при удалении сообщения: {e}")
 
+# Функция для обработки команды /shop
+async def shop_handler(message: types.Message):
+    url = os.getenv("Shop_Api_Base_Url")
+    headers = {
+        "Authorization": os.getenv("Shop_Api_Key")
+    }
+    
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, headers=headers) as response:
+                if response.status != 200:
+                    await message.reply("Не удалось получить данные магазина.")
+                    return
+
+                data = await response.json()
+                shop_items = data.get("shop", [])
+
+                # Словарь для хранения предметов по категориям
+                categorized_items = {}
+                
+                for item in shop_items:
+                    section = item.get("section", {}).get("id")
+                    if "JamTracks" in section:  # Игнорируем категорию JamTracks
+                        continue
+
+                    # Сохраняем предметы по категориям
+                    if section not in categorized_items:
+                        categorized_items[section] = []
+                    categorized_items[section].append(item)
+
+                # Отправка пользователю каждого раздела
+                for category, items in categorized_items.items():
+                    message_text = f"*Категория: {category}*\n\n"
+                    await message.answer(message_text)  # Отправляем заголовок категории
+    
+                    for item in items:
+                        # Формирование описания предмета
+                        name = item.get("displayName", "Без названия")
+                        price = item.get("price", {}).get("finalPrice", "Не указана")
+                        image_url = item.get("displayAssets", [{}])[0].get("background", "")
+        
+                        item_text = f"**{name}** - {price} V-Bucks\n"
+        
+                        # Проверка корректности URL и отправка
+                        if image_url and image_url.startswith("http"):
+                            try:
+                                await message.answer_photo(photo=image_url, caption=item_text)
+                            except Exception as e:
+                                print(f"Ошибка при отправке изображения: {e}")
+                                await message.answer(item_text)  # Отправка текста без изображения при ошибке
+                        else:
+                            await message.answer(item_text)  # Отправка только текста без изображения, если URL некорректен
+
+    except Exception as e:
+        logging.error(f"Ошибка при обработке запроса магазина: {e}")
+        await message.reply("Произошла ошибка при обработке запроса. Попробуйте снова.")
 
 async def register_handlers(dp: Dispatcher, bot):
     dp.register_message_handler(start_command, commands=[command_list.Commands.start.value])
     dp.register_message_handler(help_command, commands=[command_list.Commands.help.value])
     dp.register_message_handler(get_epic_stats, commands=[command_list.Commands.epic_stats.value])
+    dp.register_message_handler(shop_handler, commands=[command_list.Commands.shop.value])
     dp.register_message_handler(delete_command, content_types=types.ContentType.TEXT)
-
+  
